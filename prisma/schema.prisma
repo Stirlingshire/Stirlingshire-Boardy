@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Recruiting partners like Boardy
+model Vendor {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String
+  placementTerms Json?    @map("placement_terms")
+  webhookUrl     String?  @map("webhook_url")
+  apiKeyHash     String   @map("api_key_hash")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  introductions Introduction[]
+  placements    Placement[]
+
+  @@map("vendor")
+}
+
+// Status for introduction tracking
+enum IntroductionStatus {
+  OPEN
+  PLACED
+  EXPIRED
+  CANCELLED
+}
+
+// Status for meeting scheduling
+enum MeetingStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+// Double opt-in introductions from vendors
+model Introduction {
+  id                 String             @id @default(uuid()) @db.Uuid
+  vendorId           String             @map("vendor_id") @db.Uuid
+  candidateCrd       BigInt             @map("candidate_crd")
+  candidateFirstName String             @map("candidate_first_name")
+  candidateLastName  String             @map("candidate_last_name")
+  candidatePhone     String?            @map("candidate_phone")
+  candidateEmail     String?            @map("candidate_email")
+  candidateLinkedin  String?            @map("candidate_linkedin")
+  introTimestamp     DateTime           @map("intro_timestamp") @db.Timestamptz
+  recruiterName      String?            @map("recruiter_name")
+  conversationId     String             @map("conversation_id")
+  status             IntroductionStatus @default(OPEN)
+  metadata           Json?
+
+  // Meeting scheduling fields
+  meetingStartTime   DateTime?          @map("meeting_start_time") @db.Timestamptz
+  meetingEndTime     DateTime?          @map("meeting_end_time") @db.Timestamptz
+  meetingZoomLink    String?            @map("meeting_zoom_link")
+  meetingZoomId      String?            @map("meeting_zoom_id")
+  meetingCalendarId  String?            @map("meeting_calendar_id")
+  meetingStatus      MeetingStatus?     @map("meeting_status")
+
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor    Vendor     @relation(fields: [vendorId], references: [id])
+  placement Placement?
+
+  @@unique([vendorId, candidateCrd, conversationId])
+  @@index([candidateCrd])
+  @@index([status])
+  @@map("introduction")
+}
+
+// Hires detected from internal systems or FINRA sync
+model Hire {
+  id                   String    @id @default(uuid()) @db.Uuid
+  crdNumber            BigInt    @map("crd_number")
+  firstName            String    @map("first_name")
+  lastName             String    @map("last_name")
+  firmEntity           String    @map("firm_entity")
+  firmCrd              BigInt?   @map("firm_crd")
+  hireDate             DateTime  @map("hire_date") @db.Date
+  terminationDate      DateTime? @map("termination_date") @db.Date
+  source               String    // INTERNAL_ONBOARDING, FINRA_WEEKLY_SYNC
+  rawSourceReference   String?   @map("raw_source_reference")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  placements Placement[]
+
+  @@index([crdNumber])
+  @@index([hireDate])
+  @@map("hire")
+}
+
+// Status for placement billing lifecycle
+enum PlacementStatus {
+  PENDING_NOTIFY
+  NOTIFIED
+  INVOICED
+  PAID
+  DISPUTED
+}
+
+// Billable placements linking introductions to hires
+model Placement {
+  id              String          @id @default(uuid()) @db.Uuid
+  vendorId        String          @map("vendor_id") @db.Uuid
+  introductionId  String          @unique @map("introduction_id") @db.Uuid
+  hireId          String          @map("hire_id") @db.Uuid
+  candidateCrd    BigInt          @map("candidate_crd")
+  hireDate        DateTime        @map("hire_date") @db.Date
+  status          PlacementStatus @default(PENDING_NOTIFY)
+  feeAmount       Decimal         @map("fee_amount") @db.Decimal(18, 2)
+  feeCurrency     String          @default("USD") @map("fee_currency")
+  termsSnapshot   Json            @map("terms_snapshot")
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor       Vendor       @relation(fields: [vendorId], references: [id])
+  introduction Introduction @relation(fields: [introductionId], references: [id])
+  hire         Hire         @relation(fields: [hireId], references: [id])
+
+  @@index([candidateCrd])
+  @@index([status])
+  @@map("placement")
+}
+
+// Full audit trail for all entities
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  entityType String   @map("entity_type") // INTRODUCTION, HIRE, PLACEMENT
+  entityId   String   @map("entity_id") // Can be UUID or batch identifier
+  eventType  String   @map("event_type") // CREATED, UPDATED, STATUS_CHANGED, NOTIFIED_VENDOR, NOTIFIED_INTERNAL
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  source     String   // SYSTEM, BOARDY_API, INTERNAL_API, FINRA_SYNC, BROKERCHECK_SYNC
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+// Tracking advisors seen via BrokerCheck public API
+model BrokerCheckAdvisor {
+  id          String   @id @default(uuid()) @db.Uuid
+  crdNumber   BigInt   @unique @map("crd_number")
+  firstName   String   @map("first_name")
+  lastName    String   @map("last_name")
+  firmCrd     BigInt   @map("firm_crd")
+  firmName    String   @map("firm_name")
+  firstSeen   DateTime @map("first_seen") @db.Timestamptz
+  lastSeen    DateTime @map("last_seen") @db.Timestamptz
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([firmCrd])
+  @@index([isActive])
+  @@map("brokercheck_advisor")
+}
