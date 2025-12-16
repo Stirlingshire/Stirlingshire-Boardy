@@ -14,9 +14,9 @@ When Boardy's AI gets a double opt-in from a financial advisor who wants to spea
 
 **Base URL:** `https://api.stirlingshire.com` _(or your deployed URL)_
 
-**Vendor ID:** `[WILL BE PROVIDED]`
+**Vendor ID:** `5bd35782-aef5-4edf-b18c-3c0106b1c398`
 
-**API Key:** `[WILL BE PROVIDED]`
+**API Key:** `c3a9b8c77a97ced28cec4ed0f18ca4415238fe5af002f3ad55b9926922f7b2de`
 
 ---
 
