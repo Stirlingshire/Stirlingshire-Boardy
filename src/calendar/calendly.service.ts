@@ -148,11 +148,43 @@ export class CalendlyService {
   }
 
   /**
+   * Get the organization URI for webhook subscriptions
+   */
+  async getOrganizationUri(): Promise<string | null> {
+    if (!this.apiToken) return null;
+
+    const user = await this.getCurrentUser();
+    if (!user) return null;
+
+    // Organization URI is derived from user URI: /users/{id} -> /organizations/{orgId}
+    // But we need to fetch it from the user's organization membership
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/organization_memberships`,
+        {
+          headers: this.getHeaders(),
+          params: { user: user.uri },
+        },
+      );
+
+      const membership = response.data.collection[0];
+      return membership?.organization || null;
+    } catch (error) {
+      this.logger.error('Failed to get organization URI: ' + error.message);
+      return null;
+    }
+  }
+
+  /**
    * Create a single-use scheduling link for a specific candidate
    * This creates a unique URL that expires after one booking
+   * @param candidateName - The candidate's name for logging
+   * @param candidateCrd - Optional CRD to include in UTM params for tracking
+   * @param maxEventCount - Max bookings allowed (default: 1)
    */
   async createSingleUseLink(
     candidateName: string,
+    candidateCrd?: string | number,
     maxEventCount: number = 1,
   ): Promise<CalendlySchedulingLink | null> {
     if (!this.apiToken) return null;
@@ -177,11 +209,18 @@ export class CalendlyService {
       );
 
       const link = response.data.resource;
+      let bookingUrl = link.booking_url;
+
+      // Append UTM params with CRD for tracking
+      if (candidateCrd) {
+        const separator = bookingUrl.includes('?') ? '&' : '?';
+        bookingUrl = `${bookingUrl}${separator}utm_source=boardy&utm_content=crd_${candidateCrd}`;
+      }
 
       this.logger.log('Created single-use Calendly link for: ' + candidateName);
 
       return {
-        bookingUrl: link.booking_url,
+        bookingUrl,
         owner: link.owner,
         ownerType: link.owner_type,
       };
@@ -194,18 +233,31 @@ export class CalendlyService {
   /**
    * Get the booking URL - either single-use or general scheduling URL
    * @param candidateName - If provided, creates a single-use link
+   * @param candidateCrd - Optional CRD to include in UTM params for tracking
    */
-  async getBookingUrl(candidateName?: string): Promise<string | null> {
+  async getBookingUrl(
+    candidateName?: string,
+    candidateCrd?: string | number,
+  ): Promise<string | null> {
     if (!this.isConfigured()) return null;
 
-    // For now, just return the general scheduling URL
-    // Single-use links can be enabled later if needed
+    // Create single-use link with CRD tracking if provided
     if (candidateName) {
-      const singleUse = await this.createSingleUseLink(candidateName);
+      const singleUse = await this.createSingleUseLink(
+        candidateName,
+        candidateCrd,
+      );
       if (singleUse) return singleUse.bookingUrl;
     }
 
-    return this.getSchedulingUrl();
+    // Fallback to general scheduling URL with UTM params if CRD provided
+    const baseUrl = await this.getSchedulingUrl();
+    if (baseUrl && candidateCrd) {
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      return `${baseUrl}${separator}utm_source=boardy&utm_content=crd_${candidateCrd}`;
+    }
+
+    return baseUrl;
   }
 
   private getHeaders(): Record<string, string> {

@@ -134,10 +134,13 @@ export class IntroductionsService {
     });
 
     // Get Calendly booking URL if no meeting was scheduled
+    // Include CRD in UTM params so webhooks can match back to this introduction
     let calendlyUrl: string | undefined;
     if (!meetingData.meetingZoomLink && this.calendlyService.isConfigured()) {
       const candidateName = `${dto.firstName} ${dto.lastName}`;
-      calendlyUrl = (await this.calendlyService.getBookingUrl(candidateName)) || undefined;
+      calendlyUrl =
+        (await this.calendlyService.getBookingUrl(candidateName, dto.candidateCrd)) ||
+        undefined;
     }
 
     // Send Slack notification

@@ -1,196 +1,163 @@
 # Stirlingshire-Boardy
-# Stirlingshire – Advisor Placement Tracking Service (Boardy Integration)
 
-This service is the **shared, auditable ledger** between **Stirlingshire** and **Boardy**.
+**Notification & Tracking Layer** for advisor recruitment between Stirlingshire and Boardy.
 
-Its job:
-
-1. Track which advisors Boardy has **introduced** (double opt-in) to Stirlingshire recruiters — using CRD as the canonical ID.
-2. Detect when those advisors later **join Stirlingshire**, using:
-   - Internal onboarding events, and
-   - A **weekly FINRA registration/termination sync**.
-3. Create **placements** for billable hires.
-4. Push hire/placement information back to Boardy so:
-   - Boardy knows which hires to bill on.
-   - Boardy can refine targeting based on who Stirlingshire is actually hiring.
-5. Maintain a full **audit trail** that both parties can review.
-
-Boardy already has advisor master data (Name, Phone, Email, LinkedIn, CRD) provided by Stirlingshire and handles outreach. This service does not call prospects; it is the **authoritative system of record**.
+Both parties share the same Excel file of financial advisors (with CRD numbers). This service tracks key events and notifies the team via Slack.
 
 ---
 
-## Business Flow Overview
+## What It Does
 
-1. **Stirlingshire → Boardy (advisor universe)**  
-   Stirlingshire gives Boardy a list of several thousand advisors with:
-   - Name, Phone, Email, LinkedIn, CRD.
+```
+Shared Excel File (advisors with CRD numbers)
+                    ↓
+┌─────────────────────────────────────────────────────┐
+│  Stirlingshire-Boardy Tracking Service              │
+│                                                     │
+│  EVENT                    SLACK NOTIFICATION        │
+│  ─────────────────────    ────────────────────────  │
+│  1. Intro Made         →  🆕 NEW INTRO              │
+│  2. Meeting Booked     →  📅 MEETING BOOKED         │
+│  3. Hire Detected      →  🎉 NEW PLACEMENT          │
+│                                                     │
+│  + Audit trail for attribution tracking             │
+└─────────────────────────────────────────────────────┘
+```
 
-2. **Boardy outreach & double opt-in**  
-   Boardy’s AI:
-   - Contacts advisors using the list.
-   - Discusses opportunities with Stirlingshire.
-   - When an advisor **explicitly agrees** to speak with a Stirlingshire recruiter (double opt-in):
-     - Boardy records that event.
-     - Boardy’s backend sends a **single API call** to this service with the advisor’s CRD and introduction timestamp.
+**CRD number** is the key that ties everything together across all events.
 
-3. **Stirlingshire onboarding / hiring**  
-   When an advisor is actually **hired**:
-   - Internal onboarding / registration systems send a `POST /hires` event to this service, **and/or**
-   - Once per week, the service calls FINRA APIs to pull Stirlingshire’s registration/termination data and:
-     - Detect **new registrations** (new hires).
-     - Detect **terminations**.
+---
 
-4. **Matching & placements**  
-   The service:
-   - Matches **introductions** (by CRD and time) to **hires** (from internal events and weekly FINRA sync).
-   - If a valid match is found within the agreed attribution window (e.g. 12 months):
-     - Creates a **placement** record.
-     - Marks the introduction as `PLACED`.
+## Three Core Events
 
-5. **Notifications & feedback to Boardy**  
-   For each new placement:
-   - Stirlingshire gets an internal notification (email/Slack/log).
-   - Boardy receives a **webhook** with:
-     - Advisor identity (CRD + name).
-     - Hire date.
-     - Stirlingshire entity.
-     - Placement ID and fee data.
-   - Boardy:
-     - Logs this as a success for billing.
-     - Uses the hire profile to refine which advisors to target next.
+### 1. Introduction (Boardy → System)
 
-6. **Auditability**  
-   - Every introduction, hire, placement, and status change is logged in an `audit_log` table.
-   - Both parties can query introductions & placements by CRD, date, status, etc.
+When Boardy gets a **double opt-in** from an advisor:
+
+```
+POST /api/vendors/{vendorId}/introductions
+```
+
+**Slack Notification:**
+```
+🆕 NEW INTRO 🧑‍💼
+Jane Doe (CRD: 1234567)
+
+Vendor:     Boardy
+Recruiter:  Steven
+
+Email:      jane.doe@example.com
+Phone:      +1-212-555-1234
+
+📅 Schedule a Meeting [Book via Calendly]
+```
+
+### 2. Meeting Booked (Calendly → System)
+
+When an advisor books via the Calendly link:
+
+**Slack Notification:**
+```
+📅 MEETING BOOKED
+Jane Doe has scheduled a meeting via Calendly!
+
+CRD:        1234567
+Vendor:     Boardy
+Date/Time:  Thu, Jan 16, 10:00 AM EST
+
+Zoom Link:  Join Meeting
+```
+
+### 3. Hire Detected (BrokerCheck Sync)
+
+Weekly check of FINRA BrokerCheck to see if introduced advisors joined Stirlingshire:
+
+**Slack Notification:**
+```
+🎉 NEW PLACEMENT 💰
+Jane Doe has been placed!
+
+CRD:        1234567
+Firm:       Stirlingshire Investments
+Hire Date:  2025-01-15
+Intro Date: 2024-11-01
+
+Vendor:     Boardy
+```
 
 ---
 
 ## Tech Stack
 
-- Language: **TypeScript**
-- Framework: **NestJS**
-- Database: **PostgreSQL**
-- Auth: API key or JWT (machine-to-machine)
-- Migrations: Prisma or TypeORM
-- Scheduling: `@nestjs/schedule` (cron jobs)
+- **NestJS** (TypeScript)
+- **PostgreSQL** + Prisma ORM
+- **Slack** (webhook notifications)
+- **Calendly** (self-service meeting booking)
+- **FINRA BrokerCheck** (free public API for hire detection)
 
 ---
 
-## Core Data Model (PostgreSQL)
+## Quick Start
 
-### `vendor`
+```bash
+# Install dependencies
+npm install
 
-Represents recruiting partners (e.g., Boardy).
+# Set up environment
+cp .env.example .env
+# Edit .env with your database URL, Slack webhook, Calendly token
 
-- `id` (UUID, PK)
-- `name` (TEXT) — e.g. `"Boardy"`
-- `placement_terms` (JSONB) — fee rules, attribution window, etc.
-- `webhook_url` (TEXT, nullable) — where to POST placement events.
-- `api_key_hash` (TEXT) — hash of vendor API key for auth.
-- `is_active` (BOOLEAN, default TRUE)
-- `created_at` (TIMESTAMPTZ)
-- `updated_at` (TIMESTAMPTZ)
+# Run database migrations
+npx prisma migrate deploy
 
-### `introduction`
+# Generate Prisma client
+npx prisma generate
 
-Each **double opt-in** introduction from Boardy.
-
-- `id` (UUID, PK)
-- `vendor_id` (UUID, FK → `vendor.id`)
-- `candidate_crd` (BIGINT, indexed)
-- `candidate_first_name` (TEXT)
-- `candidate_last_name` (TEXT)
-- `candidate_phone` (TEXT, nullable)
-- `candidate_email` (TEXT, nullable)
-- `candidate_linkedin` (TEXT, nullable)
-- `intro_timestamp` (TIMESTAMPTZ)
-- `recruiter_name` (TEXT, nullable) — Stirlingshire recruiter introduced to.
-- `conversation_id` (TEXT) — Boardy’s internal conversation/lead ID.
-- `status` (ENUM) — `OPEN | PLACED | EXPIRED | CANCELLED`
-- `metadata` (JSONB, nullable) — campaign, territory, etc.
-- `created_at` (TIMESTAMPTZ)
-- `updated_at` (TIMESTAMPTZ)
-
-**Uniqueness (idempotency):**
-
-- Unique constraint: `(vendor_id, candidate_crd, conversation_id)`
-
-### `hire`
-
-Represents a hire at a Stirlingshire entity (from internal systems or FINRA weekly sync).
-
-- `id` (UUID, PK)
-- `crd_number` (BIGINT, indexed)
-- `first_name` (TEXT)
-- `last_name` (TEXT)
-- `firm_entity` (TEXT) — e.g. `"Stirlingshire BD LLC"`, `"Stirlingshire RIA LLC"`.
-- `firm_crd` (BIGINT, nullable if internal-only source)
-- `hire_date` (DATE)
-- `termination_date` (DATE, nullable) — if/when FINRA or internal data shows termination.
-- `source` (TEXT) — `"INTERNAL_ONBOARDING" | "FINRA_WEEKLY_SYNC" | ...`
-- `raw_source_reference` (TEXT, nullable) — e.g., HR system ID, FINRA file batch ID.
-- `created_at` (TIMESTAMPTZ)
-- `updated_at` (TIMESTAMPTZ)
-
-### `placement`
-
-Billable placements.
-
-- `id` (UUID, PK)
-- `vendor_id` (UUID, FK → `vendor.id`)
-- `introduction_id` (UUID, FK → `introduction.id`, unique)
-- `hire_id` (UUID, FK → `hire.id`)
-- `candidate_crd` (BIGINT, indexed)
-- `hire_date` (DATE)
-- `status` (ENUM) — `PENDING_NOTIFY | NOTIFIED | INVOICED | PAID | DISPUTED`
-- `fee_amount` (NUMERIC(18,2))
-- `fee_currency` (TEXT, default `'USD'`)
-- `terms_snapshot` (JSONB) — copy of vendor’s placement terms at creation.
-- `created_at` (TIMESTAMPTZ)
-- `updated_at` (TIMESTAMPTZ)
-
-### `audit_log`
-
-For a full, reconstructible history.
-
-- `id` (UUID, PK)
-- `entity_type` (TEXT) — `"INTRODUCTION" | "HIRE" | "PLACEMENT"`
-- `entity_id` (UUID)
-- `event_type` (TEXT) — `"CREATED" | "UPDATED" | "STATUS_CHANGED" | "NOTIFIED_VENDOR" | "NOTIFIED_INTERNAL"`
-- `old_value` (JSONB, nullable)
-- `new_value` (JSONB, nullable)
-- `source` (TEXT) — `"SYSTEM" | "BOARDY_API" | "INTERNAL_API" | "FINRA_SYNC"`
-- `created_at` (TIMESTAMPTZ)
+# Start the server
+npm run start:dev
+```
 
 ---
 
-## API – Boardy-Facing
+## Environment Variables
 
-Base path: `/api`.  
-Auth: Vendor API key or JWT mapped to `vendor.id`.
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SLACK_WEBHOOK_URL` | Slack incoming webhook URL |
+| `SLACK_CHANNEL` | Channel for notifications (default: #stirlingshire-boardy-hiring) |
+| `CALENDLY_API_TOKEN` | Calendly API token (Pro plan required) |
+| `CALENDLY_WEBHOOK_SIGNING_KEY` | Webhook signature verification |
+| `STIRLINGSHIRE_FIRM_CRD` | Firm CRD to monitor in BrokerCheck |
 
-### 1. Log a Double Opt-In Introduction (Boardy → Service)
+---
 
-**Endpoint**
+## API Endpoints
 
-`POST /api/vendors/:vendorId/introductions`
+### Introductions
+- `POST /api/vendors/:vendorId/introductions` - Log a new introduction
+- `GET /api/vendors/:vendorId/introductions` - List introductions
 
-**Request body (JSON)**
+### Hires
+- `POST /api/hires` - Log a hire (internal systems)
+- `GET /api/hires` - List hires
 
-```json
-{
-  "candidateCrd": 1234567,
-  "firstName": "Jane",
-  "lastName": "Doe",
-  "phone": "+1-212-555-1234",
-  "email": "jane.doe@example.com",
-  "linkedin": "https://www.linkedin.com/in/janedoe",
-  "introTimestamp": "2025-12-09T15:02:00Z",
-  "recruiterName": "John Recruiter",
-  "conversationId": "boardy-convo-123",
-  "metadata": {
-    "campaign": "US-Expansion-2026",
-    "region": "NY/NJ",
-    "seniority": "Senior FA"
-  }
-}
+### Placements
+- `GET /api/placements` - List placements
+- `POST /api/placements/match/:hireId` - Match a hire to introductions
+
+### Webhooks
+- `POST /api/webhooks/calendly` - Receive Calendly booking events
+
+---
+
+## Documentation
+
+- [Boardy Integration Guide](docs/BOARDY_INTEGRATION.md) - API details for Boardy
+- [Swagger Docs](http://localhost:3000/api/docs) - Interactive API documentation
+
+---
+
+## Attribution Window
+
+When an advisor is hired, the system checks if there was an introduction within the **attribution window** (default: 12 months). If yes, a placement is created and attributed to Boardy.

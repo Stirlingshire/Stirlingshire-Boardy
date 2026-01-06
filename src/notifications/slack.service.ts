@@ -28,6 +28,22 @@ export interface SlackIntroductionNotification {
   calendlyUrl?: string;
 }
 
+export interface SlackMeetingScheduledNotification {
+  candidateName: string;
+  candidateCrd: number;
+  vendorName: string;
+  meetingTime: string;
+  meetingZoomLink?: string;
+  introductionId: string;
+}
+
+export interface SlackMeetingCanceledNotification {
+  candidateName: string;
+  candidateCrd: number;
+  vendorName: string;
+  introductionId: string;
+}
+
 @Injectable()
 export class SlackService {
   private readonly logger = new Logger(SlackService.name);
@@ -305,6 +321,133 @@ export class SlackService {
         });
       }
     }
+
+    return this.sendMessage({ blocks });
+  }
+
+  async notifyMeetingScheduled(
+    notification: SlackMeetingScheduledNotification,
+  ): Promise<boolean> {
+    if (!this.webhookUrl) {
+      this.logger.warn('Slack webhook URL not configured');
+      return false;
+    }
+
+    const meetingDate = new Date(notification.meetingTime);
+    const formattedTime = meetingDate.toLocaleString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    });
+
+    const blocks: unknown[] = [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: '📅 MEETING BOOKED',
+          emoji: true,
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*${notification.candidateName}* has scheduled a meeting via Calendly!`,
+        },
+      },
+      {
+        type: 'section',
+        fields: [
+          {
+            type: 'mrkdwn',
+            text: `*CRD:*\n${notification.candidateCrd}`,
+          },
+          {
+            type: 'mrkdwn',
+            text: `*Vendor:*\n${notification.vendorName}`,
+          },
+          {
+            type: 'mrkdwn',
+            text: `*Date/Time:*\n${formattedTime}`,
+          },
+        ],
+      },
+    ];
+
+    if (notification.meetingZoomLink) {
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Zoom Link:* <${notification.meetingZoomLink}|Join Meeting>`,
+        },
+      });
+    }
+
+    blocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `Introduction ID: ${notification.introductionId}`,
+        },
+      ],
+    });
+
+    return this.sendMessage({ blocks });
+  }
+
+  async notifyMeetingCanceled(
+    notification: SlackMeetingCanceledNotification,
+  ): Promise<boolean> {
+    if (!this.webhookUrl) {
+      this.logger.warn('Slack webhook URL not configured');
+      return false;
+    }
+
+    const blocks: unknown[] = [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: '❌ MEETING CANCELED',
+          emoji: true,
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*${notification.candidateName}* has canceled their meeting.`,
+        },
+      },
+      {
+        type: 'section',
+        fields: [
+          {
+            type: 'mrkdwn',
+            text: `*CRD:*\n${notification.candidateCrd}`,
+          },
+          {
+            type: 'mrkdwn',
+            text: `*Vendor:*\n${notification.vendorName}`,
+          },
+        ],
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `Introduction ID: ${notification.introductionId}`,
+          },
+        ],
+      },
+    ];
 
     return this.sendMessage({ blocks });
   }

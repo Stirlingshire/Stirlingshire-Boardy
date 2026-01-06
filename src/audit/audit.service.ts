@@ -7,13 +7,15 @@ export type EventType =
   | 'UPDATED'
   | 'STATUS_CHANGED'
   | 'NOTIFIED_VENDOR'
-  | 'NOTIFIED_INTERNAL';
+  | 'NOTIFIED_INTERNAL'
+  | 'MEETING_SCHEDULED'
+  | 'MEETING_CANCELED';
 export type AuditSource =
   | 'SYSTEM'
   | 'BOARDY_API'
   | 'INTERNAL_API'
-  | 'FINRA_SYNC'
-  | 'BROKERCHECK_SYNC';
+  | 'BROKERCHECK_SYNC'
+  | 'CALENDLY_WEBHOOK';
 
 export interface CreateAuditLogDto {
   entityType: EntityType;

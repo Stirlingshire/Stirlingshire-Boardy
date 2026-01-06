@@ -57,12 +57,14 @@ model Introduction {
   metadata           Json?
 
   // Meeting scheduling fields
-  meetingStartTime   DateTime?          @map("meeting_start_time") @db.Timestamptz
-  meetingEndTime     DateTime?          @map("meeting_end_time") @db.Timestamptz
-  meetingZoomLink    String?            @map("meeting_zoom_link")
-  meetingZoomId      String?            @map("meeting_zoom_id")
-  meetingCalendarId  String?            @map("meeting_calendar_id")
-  meetingStatus      MeetingStatus?     @map("meeting_status")
+  meetingStartTime          DateTime?     @map("meeting_start_time") @db.Timestamptz
+  meetingEndTime            DateTime?     @map("meeting_end_time") @db.Timestamptz
+  meetingZoomLink           String?       @map("meeting_zoom_link")
+  meetingZoomId             String?       @map("meeting_zoom_id")
+  meetingCalendarId         String?       @map("meeting_calendar_id")
+  meetingStatus             MeetingStatus? @map("meeting_status")
+  meetingCalendlyUri        String?       @map("meeting_calendly_uri")
+  meetingCalendlyInviteeUri String?       @map("meeting_calendly_invitee_uri")
 
   createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz

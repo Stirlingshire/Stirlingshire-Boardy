@@ -25,11 +25,11 @@ export class QueryAuditDto {
   entityType?: 'INTRODUCTION' | 'HIRE' | 'PLACEMENT' | 'VENDOR';
 
   @ApiPropertyOptional({
-    enum: ['SYSTEM', 'BOARDY_API', 'INTERNAL_API', 'FINRA_SYNC'],
+    enum: ['SYSTEM', 'BOARDY_API', 'INTERNAL_API', 'BROKERCHECK_SYNC', 'CALENDLY_WEBHOOK'],
   })
   @IsOptional()
-  @IsEnum(['SYSTEM', 'BOARDY_API', 'INTERNAL_API', 'FINRA_SYNC'])
-  source?: 'SYSTEM' | 'BOARDY_API' | 'INTERNAL_API' | 'FINRA_SYNC';
+  @IsEnum(['SYSTEM', 'BOARDY_API', 'INTERNAL_API', 'BROKERCHECK_SYNC', 'CALENDLY_WEBHOOK'])
+  source?: 'SYSTEM' | 'BOARDY_API' | 'INTERNAL_API' | 'BROKERCHECK_SYNC' | 'CALENDLY_WEBHOOK';
 
   @ApiPropertyOptional({ description: 'Start date for filtering' })
   @IsOptional()

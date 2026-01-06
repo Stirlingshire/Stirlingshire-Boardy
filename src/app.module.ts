@@ -9,7 +9,6 @@ import { HiresModule } from './hires/hires.module';
 import { PlacementsModule } from './placements/placements.module';
 import { AuditModule } from './audit/audit.module';
 import { NotificationsModule } from './notifications/notifications.module';
-import { FinraSyncModule } from './finra-sync/finra-sync.module';
 import { ZoomModule } from './zoom/zoom.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { BrokerCheckModule } from './brokercheck/brokercheck.module';
@@ -29,7 +28,6 @@ import { ApiKeyGuard } from './common/guards/api-key.guard';
     PlacementsModule,
     AuditModule,
     NotificationsModule,
-    FinraSyncModule,
     ZoomModule,
     CalendarModule,
     BrokerCheckModule,
